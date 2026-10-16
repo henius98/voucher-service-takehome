@@ -2,6 +2,7 @@ package com.prizm.campaign;
 
 import com.prizm.campaign.dto.RedeemResponse;
 import com.prizm.campaign.model.Campaign;
+import com.prizm.campaign.model.Redemption;
 import com.prizm.campaign.model.Voucher;
 import com.prizm.campaign.repository.CampaignRepository;
 import com.prizm.campaign.repository.RedemptionRepository;
@@ -10,8 +11,10 @@ import com.prizm.campaign.service.VoucherService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +23,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
 class VoucherServiceTest {
@@ -32,6 +36,9 @@ class VoucherServiceTest {
 
     @Autowired
     private CampaignRepository campaignRepository;
+
+    @Autowired
+    private RedemptionRepository redemptionRepository;
 
     @Test
     void redeemActiveVoucherSucceeds() {
@@ -161,9 +168,6 @@ class VoucherServiceTest {
         assertEquals("FAILED", third.getResult());
         assertEquals("User redemption limit reached", third.getMessage());
     }
-
-    @Autowired
-    private RedemptionRepository redemptionRepository;
 
     @Test
     void concurrentRedeemSameVoucherAllowsOnlyOneSuccess() throws Exception {
@@ -386,6 +390,40 @@ class VoucherServiceTest {
         assertEquals(2, successCount.get());
         assertEquals(threads - 2, limitReachedCount.get());
         assertEquals(2, redemptionRepository.countByCampaignIdAndUserId(77L, "user-race"));
+    }
+
+    @Test
+    void duplicateVoucherCodeThrowsException() {
+        Voucher duplicate = new Voucher();
+        duplicate.setId(500L);
+        duplicate.setCampaignId(1L);
+        duplicate.setCode("RAYA-0001");
+        duplicate.setStatus("ACTIVE");
+
+        assertThrows(DataIntegrityViolationException.class, () -> voucherRepository.saveAndFlush(duplicate));
+    }
+
+    @Test
+    void voucherWithInvalidCampaignIdThrowsException() {
+        Voucher orphan = new Voucher();
+        orphan.setId(501L);
+        orphan.setCampaignId(99999L);
+        orphan.setCode("ORPHAN-0001");
+        orphan.setStatus("ACTIVE");
+
+        assertThrows(DataIntegrityViolationException.class, () -> voucherRepository.saveAndFlush(orphan));
+    }
+
+    @Test
+    void redemptionWithInvalidVoucherIdThrowsException() {
+        Redemption orphan = new Redemption(99999L, 1L, "user-orphan", new Date());
+        assertThrows(DataIntegrityViolationException.class, () -> redemptionRepository.saveAndFlush(orphan));
+    }
+
+    @Test
+    void redemptionWithInvalidCampaignIdThrowsException() {
+        Redemption orphan = new Redemption(1L, 99999L, "user-orphan", new Date());
+        assertThrows(DataIntegrityViolationException.class, () -> redemptionRepository.saveAndFlush(orphan));
     }
 }
 

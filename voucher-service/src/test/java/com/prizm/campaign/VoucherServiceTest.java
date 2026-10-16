@@ -7,11 +7,15 @@ import com.prizm.campaign.model.Voucher;
 import com.prizm.campaign.repository.CampaignRepository;
 import com.prizm.campaign.repository.RedemptionRepository;
 import com.prizm.campaign.repository.VoucherRepository;
+import com.prizm.campaign.service.CampaignStatsService;
 import com.prizm.campaign.service.VoucherService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -32,6 +36,9 @@ class VoucherServiceTest {
     private VoucherService voucherService;
 
     @Autowired
+    private CampaignStatsService campaignStatsService;
+
+    @Autowired
     private VoucherRepository voucherRepository;
 
     @Autowired
@@ -39,6 +46,9 @@ class VoucherServiceTest {
 
     @Autowired
     private RedemptionRepository redemptionRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void redeemActiveVoucherSucceeds() {
@@ -424,6 +434,34 @@ class VoucherServiceTest {
     void redemptionWithInvalidCampaignIdThrowsException() {
         Redemption orphan = new Redemption(1L, 99999L, "user-orphan", new Date());
         assertThrows(DataIntegrityViolationException.class, () -> redemptionRepository.saveAndFlush(orphan));
+    }
+
+    @Test
+    void redeemFailsWhenCampaignNotFound() {
+        jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY FALSE");
+        try {
+            Voucher orphanedVoucher = new Voucher();
+            orphanedVoucher.setId(888L);
+            orphanedVoucher.setCampaignId(999999L);
+            orphanedVoucher.setCode("ORPHAN-0001");
+            orphanedVoucher.setStatus("ACTIVE");
+            voucherRepository.save(orphanedVoucher);
+
+            RedeemResponse res = voucherService.redeem("ORPHAN-0001", "user-1");
+            assertEquals("FAILED", res.getResult());
+            assertEquals("Campaign not found", res.getMessage());
+        } finally {
+            jdbcTemplate.execute("SET REFERENTIAL_INTEGRITY TRUE");
+        }
+    }
+
+    @Test
+    void getStatsThrowsNotFoundWhenCampaignDoesNotExist() {
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> campaignStatsService.getStats(999999L)
+        );
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
     }
 }
 

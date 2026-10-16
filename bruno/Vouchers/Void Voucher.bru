@@ -1,0 +1,19 @@
+meta {
+  name: Void Voucher
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/vouchers/:code/void
+  body: none
+  auth: none
+}
+
+params:path {
+  code: RAYA-0006
+}
+
+docs {
+  Mark a voucher as void.
+}

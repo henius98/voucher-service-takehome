@@ -1,0 +1,23 @@
+meta {
+  name: Redeem Voucher
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/vouchers/:code/redeem?userId=user-1
+  body: none
+  auth: none
+}
+
+params:query {
+  userId: user-1
+}
+
+params:path {
+  code: RAYA-0001
+}
+
+docs {
+  Redeem a voucher code for a specific user.
+}

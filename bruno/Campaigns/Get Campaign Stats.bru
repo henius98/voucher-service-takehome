@@ -1,0 +1,19 @@
+meta {
+  name: Get Campaign Stats
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/campaigns/:id/stats
+  body: none
+  auth: none
+}
+
+params:path {
+  id: 1
+}
+
+docs {
+  Retrieve stock and redemption statistics for a campaign by its ID.
+}

@@ -10,6 +10,7 @@ import com.prizm.campaign.repository.VoucherRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
@@ -30,6 +31,9 @@ public class VoucherService {
 
     @Autowired
     private AuditClient auditClient;
+
+    @Value("${campaign.default-per-user-limit:2}")
+    private int defaultPerUserLimit;
 
     public RedeemResponse redeem(String code, String userId) {
 
@@ -54,6 +58,11 @@ public class VoucherService {
 
         if (campaign.getRemainingStock() <= 0) {
             return RedeemResponse.fail("Campaign out of stock");
+        }
+
+        int perUserLimit = campaign.getPerUserLimit() != null ? campaign.getPerUserLimit() : defaultPerUserLimit;
+        if (redemptionRepository.countByCampaignIdAndUserId(campaign.getId(), userId) >= perUserLimit) {
+            return RedeemResponse.fail("User redemption limit reached");
         }
 
         voucher.setStatus("REDEEMED");

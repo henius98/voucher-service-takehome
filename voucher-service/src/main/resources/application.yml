@@ -17,3 +17,6 @@ server:
 logging:
   level:
     com.prizm.campaign: INFO
+
+campaign:
+  default-per-user-limit: 2

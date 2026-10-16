@@ -20,3 +20,7 @@ logging:
 
 campaign:
   default-per-user-limit: 2
+
+audit:
+  url: http://internal-audit.prizm.local/api/v2/events
+  api-key: pzm_audit_7f3a91c4

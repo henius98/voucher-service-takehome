@@ -40,4 +40,11 @@ class AuditClientTest {
         assertEquals(500, connectTimeout);
         assertEquals(500, readTimeout);
     }
+
+    @Test
+    void configValuesAreInjectedFromApplicationYml() {
+        assertNotNull(auditClient);
+        assertEquals("http://internal-audit.prizm.local/api/v2/events", ReflectionTestUtils.getField(auditClient, "auditUrl"));
+        assertEquals("pzm_audit_7f3a91c4", ReflectionTestUtils.getField(auditClient, "apiKey"));
+    }
 }

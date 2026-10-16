@@ -5,10 +5,13 @@ import com.prizm.campaign.model.Campaign;
 import com.prizm.campaign.model.Voucher;
 import com.prizm.campaign.repository.CampaignRepository;
 import com.prizm.campaign.repository.VoucherRepository;
+import com.prizm.campaign.service.CampaignStatsService;
 import com.prizm.campaign.service.VoucherService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,12 +22,16 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @SpringBootTest
 class VoucherServiceTest {
 
     @Autowired
     private VoucherService voucherService;
+
+    @Autowired
+    private CampaignStatsService campaignStatsService;
 
     @Autowired
     private VoucherRepository voucherRepository;
@@ -206,5 +213,28 @@ class VoucherServiceTest {
         assertEquals(1, successCount.get());
         assertEquals(threads - 1, failCount.get());
         assertEquals("REDEEMED", voucherRepository.findByCode("CONC-0001").getStatus());
+    }
+
+    @Test
+    void redeemFailsWhenCampaignNotFound() {
+        Voucher orphanedVoucher = new Voucher();
+        orphanedVoucher.setId(888L);
+        orphanedVoucher.setCampaignId(999999L);
+        orphanedVoucher.setCode("ORPHAN-0001");
+        orphanedVoucher.setStatus("ACTIVE");
+        voucherRepository.save(orphanedVoucher);
+
+        RedeemResponse res = voucherService.redeem("ORPHAN-0001", "user-1");
+        assertEquals("FAILED", res.getResult());
+        assertEquals("Campaign not found", res.getMessage());
+    }
+
+    @Test
+    void getStatsThrowsNotFoundWhenCampaignDoesNotExist() {
+        ResponseStatusException ex = assertThrows(
+                ResponseStatusException.class,
+                () -> campaignStatsService.getStats(999999L)
+        );
+        assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
     }
 }

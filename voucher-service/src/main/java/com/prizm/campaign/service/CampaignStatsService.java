@@ -6,7 +6,9 @@ import com.prizm.campaign.model.Voucher;
 import com.prizm.campaign.repository.CampaignRepository;
 import com.prizm.campaign.repository.RedemptionRepository;
 import com.prizm.campaign.repository.VoucherRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +29,10 @@ public class CampaignStatsService {
     }
 
     public CampaignStats getStats(Long campaignId) {
-        Campaign campaign = campaignRepository.findById(campaignId).get();
+        Campaign campaign = campaignRepository.findById(campaignId).orElse(null);
+        if (campaign == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Campaign not found");
+        }
 
         List<Voucher> vouchers = voucherRepository.findByCampaignId(campaignId);
 

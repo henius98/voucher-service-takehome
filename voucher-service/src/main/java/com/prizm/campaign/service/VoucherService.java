@@ -52,7 +52,10 @@ public class VoucherService {
             return RedeemResponse.fail("Voucher is void");
         }
 
-        Campaign campaign = campaignRepository.findById(voucher.getCampaignId()).get();
+        Campaign campaign = campaignRepository.findById(voucher.getCampaignId()).orElse(null);
+        if (campaign == null) {
+            return RedeemResponse.fail("Campaign not found");
+        }
 
         if (!campaign.isActive()) {
             return RedeemResponse.fail("Campaign is not active");

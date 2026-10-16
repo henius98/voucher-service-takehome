@@ -207,4 +207,123 @@ class VoucherServiceTest {
         assertEquals(threads - 1, failCount.get());
         assertEquals("REDEEMED", voucherRepository.findByCode("CONC-0001").getStatus());
     }
+
+    @Test
+    void concurrentRedemptionsRespectRemainingStockAndPreventLostUpdate() throws Exception {
+        Campaign campaign = new Campaign();
+        campaign.setId(300L);
+        campaign.setName("Stock Concurrency Test");
+        campaign.setClientCode("CONC_STOCK");
+        campaign.setTotalStock(10);
+        campaign.setRemainingStock(2);
+        campaign.setActive(true);
+        campaign.setPerUserLimit(10);
+        campaignRepository.save(campaign);
+
+        int threads = 10;
+        for (int i = 0; i < threads; i++) {
+            Voucher v = new Voucher();
+            v.setId(3000L + i);
+            v.setCampaignId(300L);
+            v.setCode("STOCK-" + i);
+            v.setStatus("ACTIVE");
+            voucherRepository.save(v);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+        AtomicInteger outOfStockCount = new AtomicInteger();
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            final String code = "STOCK-" + i;
+            final String uid = "user-stock-" + i;
+            futures.add(executor.submit(() -> {
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    RedeemResponse res = voucherService.redeem(code, uid);
+                    if ("OK".equals(res.getResult())) {
+                        successCount.incrementAndGet();
+                    } else if ("Campaign out of stock".equals(res.getMessage())) {
+                        outOfStockCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                }
+            }));
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        assertEquals(2, successCount.get());
+        assertEquals(8, outOfStockCount.get());
+        Campaign updatedCampaign = campaignRepository.findById(300L).get();
+        assertEquals(0, updatedCampaign.getRemainingStock());
+    }
+
+    @Test
+    void concurrentRedemptionsPreventLostUpdateWhenStockSufficient() throws Exception {
+        Campaign campaign = new Campaign();
+        campaign.setId(400L);
+        campaign.setName("Sufficient Stock Concurrency Test");
+        campaign.setClientCode("CONC_SUFF");
+        campaign.setTotalStock(10);
+        campaign.setRemainingStock(10);
+        campaign.setActive(true);
+        campaign.setPerUserLimit(10);
+        campaignRepository.save(campaign);
+
+        int threads = 10;
+        for (int i = 0; i < threads; i++) {
+            Voucher v = new Voucher();
+            v.setId(4000L + i);
+            v.setCampaignId(400L);
+            v.setCode("SUFF-" + i);
+            v.setStatus("ACTIVE");
+            voucherRepository.save(v);
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            final String code = "SUFF-" + i;
+            final String uid = "user-suff-" + i;
+            futures.add(executor.submit(() -> {
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    RedeemResponse res = voucherService.redeem(code, uid);
+                    if ("OK".equals(res.getResult())) {
+                        successCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                }
+            }));
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        assertEquals(10, successCount.get());
+        Campaign updatedCampaign = campaignRepository.findById(400L).get();
+        assertEquals(0, updatedCampaign.getRemainingStock());
+    }
 }
+
+
+

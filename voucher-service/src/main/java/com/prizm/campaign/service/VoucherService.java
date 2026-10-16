@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import java.util.Date;
 
@@ -72,8 +73,11 @@ public class VoucherService {
             return RedeemResponse.fail("Voucher already redeemed");
         }
 
-        campaign.setRemainingStock(campaign.getRemainingStock() - 1);
-        campaignRepository.save(campaign);
+        int updated = campaignRepository.decrementStock(campaign.getId());
+        if (updated == 0) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return RedeemResponse.fail("Campaign out of stock");
+        }
 
         Redemption redemption = new Redemption(
                 voucher.getId(), campaign.getId(), userId, new Date());
@@ -85,7 +89,8 @@ public class VoucherService {
             log.error("audit call failed");
         }
 
-        return RedeemResponse.ok(voucher.getCode(), campaign.getRemainingStock());
+        int remainingStock = campaignRepository.findById(campaign.getId()).map(Campaign::getRemainingStock).orElse(0);
+        return RedeemResponse.ok(voucher.getCode(), remainingStock);
     }
 
     public RedeemResponse voidVoucher(String code) {

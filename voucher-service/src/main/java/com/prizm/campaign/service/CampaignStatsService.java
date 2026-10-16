@@ -31,13 +31,10 @@ public class CampaignStatsService {
 
         List<Voucher> vouchers = voucherRepository.findByCampaignId(campaignId);
 
-        int redeemed = 0;
+        int redeemed = (int) redemptionRepository.countByCampaignId(campaignId);
         int active = 0;
 
         for (Voucher v : vouchers) {
-            if (!redemptionRepository.findByVoucherId(v.getId()).isEmpty()) {
-                redeemed++;
-            }
             if ("ACTIVE".equals(v.getStatus())) {
                 active++;
             }

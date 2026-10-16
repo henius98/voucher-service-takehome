@@ -89,7 +89,7 @@ public class VoucherService {
         try {
             auditClient.recordRedemption(campaign.getClientCode(), voucher.getCode(), userId);
         } catch (Exception e) {
-            log.error("audit call failed");
+            log.error("audit call failed for voucher {}", voucher.getCode(), e);
         }
 
         int remainingStock = campaignRepository.findById(campaign.getId()).map(Campaign::getRemainingStock).orElse(0);

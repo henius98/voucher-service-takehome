@@ -4,6 +4,7 @@ import com.prizm.campaign.dto.RedeemResponse;
 import com.prizm.campaign.model.Campaign;
 import com.prizm.campaign.model.Voucher;
 import com.prizm.campaign.repository.CampaignRepository;
+import com.prizm.campaign.repository.RedemptionRepository;
 import com.prizm.campaign.repository.VoucherRepository;
 import com.prizm.campaign.service.VoucherService;
 import org.junit.jupiter.api.Test;
@@ -160,6 +161,9 @@ class VoucherServiceTest {
         assertEquals("FAILED", third.getResult());
         assertEquals("User redemption limit reached", third.getMessage());
     }
+
+    @Autowired
+    private RedemptionRepository redemptionRepository;
 
     @Test
     void concurrentRedeemSameVoucherAllowsOnlyOneSuccess() throws Exception {
@@ -322,6 +326,66 @@ class VoucherServiceTest {
         assertEquals(10, successCount.get());
         Campaign updatedCampaign = campaignRepository.findById(400L).get();
         assertEquals(0, updatedCampaign.getRemainingStock());
+    }
+
+    @Test
+    void concurrentRedeemBySameUserDoesNotExceedPerUserLimit() throws Exception {
+        Campaign campaign = new Campaign();
+        campaign.setId(77L);
+        campaign.setName("Concurrent Limit Campaign");
+        campaign.setClientCode("TEST");
+        campaign.setTotalStock(10);
+        campaign.setRemainingStock(10);
+        campaign.setActive(true);
+        campaign.setPerUserLimit(2);
+        campaignRepository.save(campaign);
+
+        int voucherCount = 10;
+        for (int i = 0; i < voucherCount; i++) {
+            Voucher v = new Voucher();
+            v.setId(7700L + i);
+            v.setCampaignId(77L);
+            v.setCode("RACE-" + i);
+            v.setStatus("ACTIVE");
+            voucherRepository.save(v);
+        }
+
+        int threads = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+        AtomicInteger limitReachedCount = new AtomicInteger();
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            final String code = "RACE-" + i;
+            futures.add(executor.submit(() -> {
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    RedeemResponse res = voucherService.redeem(code, "user-race");
+                    if ("OK".equals(res.getResult())) {
+                        successCount.incrementAndGet();
+                    } else if ("User redemption limit reached".equals(res.getMessage())) {
+                        limitReachedCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                    // ignore
+                }
+            }));
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        assertEquals(2, successCount.get());
+        assertEquals(threads - 2, limitReachedCount.get());
+        assertEquals(2, redemptionRepository.countByCampaignIdAndUserId(77L, "user-race"));
     }
 }
 

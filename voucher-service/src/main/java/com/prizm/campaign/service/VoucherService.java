@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 
@@ -35,6 +36,7 @@ public class VoucherService {
     @Value("${campaign.default-per-user-limit:2}")
     private int defaultPerUserLimit;
 
+    @Transactional
     public RedeemResponse redeem(String code, String userId) {
 
         Voucher voucher = voucherRepository.findByCode(code);
@@ -65,10 +67,10 @@ public class VoucherService {
             return RedeemResponse.fail("User redemption limit reached");
         }
 
-        voucher.setStatus("REDEEMED");
-        voucher.setRedeemedBy(userId);
-        voucher.setRedeemedAt(new Date());
-        voucherRepository.save(voucher);
+        int claimed = voucherRepository.claimVoucher(code, userId, new Date());
+        if (claimed == 0) {
+            return RedeemResponse.fail("Voucher already redeemed");
+        }
 
         campaign.setRemainingStock(campaign.getRemainingStock() - 1);
         campaignRepository.save(campaign);

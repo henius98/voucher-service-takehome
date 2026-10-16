@@ -10,6 +10,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @SpringBootTest
@@ -151,5 +159,52 @@ class VoucherServiceTest {
         RedeemResponse third = voucherService.redeem("NULL-0003", "user-null-limit");
         assertEquals("FAILED", third.getResult());
         assertEquals("User redemption limit reached", third.getMessage());
+    }
+
+    @Test
+    void concurrentRedeemSameVoucherAllowsOnlyOneSuccess() throws Exception {
+        Voucher concurrentVoucher = new Voucher();
+        concurrentVoucher.setId(200L);
+        concurrentVoucher.setCampaignId(1L);
+        concurrentVoucher.setCode("CONC-0001");
+        concurrentVoucher.setStatus("ACTIVE");
+        voucherRepository.save(concurrentVoucher);
+
+        int threads = 10;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch readyLatch = new CountDownLatch(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+        AtomicInteger failCount = new AtomicInteger();
+
+        List<Future<?>> futures = new ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            final String uid = "user-conc-" + i;
+            futures.add(executor.submit(() -> {
+                readyLatch.countDown();
+                try {
+                    startLatch.await();
+                    RedeemResponse res = voucherService.redeem("CONC-0001", uid);
+                    if ("OK".equals(res.getResult())) {
+                        successCount.incrementAndGet();
+                    } else {
+                        failCount.incrementAndGet();
+                    }
+                } catch (Exception e) {
+                    failCount.incrementAndGet();
+                }
+            }));
+        }
+
+        readyLatch.await();
+        startLatch.countDown();
+        for (Future<?> f : futures) {
+            f.get();
+        }
+        executor.shutdown();
+
+        assertEquals(1, successCount.get());
+        assertEquals(threads - 1, failCount.get());
+        assertEquals("REDEEMED", voucherRepository.findByCode("CONC-0001").getStatus());
     }
 }

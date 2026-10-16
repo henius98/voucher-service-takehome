@@ -18,7 +18,9 @@ CREATE TABLE voucher (
     code        VARCHAR(40)  NOT NULL,
     status      VARCHAR(20)  NOT NULL,
     redeemed_by VARCHAR(80),
-    redeemed_at TIMESTAMP
+    redeemed_at TIMESTAMP,
+    UNIQUE (code),
+    FOREIGN KEY (campaign_id) REFERENCES campaign(id)
 );
 
 CREATE TABLE redemption (
@@ -26,5 +28,7 @@ CREATE TABLE redemption (
     voucher_id  BIGINT      NOT NULL,
     campaign_id BIGINT      NOT NULL,
     user_id     VARCHAR(80) NOT NULL,
-    created_at  TIMESTAMP   NOT NULL
+    created_at  TIMESTAMP   NOT NULL,
+    FOREIGN KEY (voucher_id) REFERENCES voucher(id),
+    FOREIGN KEY (campaign_id) REFERENCES campaign(id)
 );
